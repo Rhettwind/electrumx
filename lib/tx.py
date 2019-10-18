@@ -502,4 +502,11 @@ class DeserializerDecred(Deserializer):
             locktime,
             expiry,
             witness
-        ), DeserializerDecred.blake256(no_witness_tx)        
+        ), DeserializerDecred.blake256(no_witness_tx)
+
+
+class DeserializerMFCoin(DeserializerTxTimeSegWit):
+     def read_header(self, static_header_size):
+        '''Return the block header bytes'''
+        header_len = 116
+        return self._read_nbytes(header_len)   

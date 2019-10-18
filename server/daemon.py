@@ -381,3 +381,15 @@ class LegacyRPCDaemon(Daemon):
         if isinstance(t, int):
             return t
         return timegm(strptime(t, "%Y-%m-%d %H:%M:%S %Z"))
+
+
+class MFCoinDaemon(Daemon):
+
+    async def raw_blocks(self, hex_hashes):
+        '''Return the raw binary blocks with the given hex hashes.'''
+        params_iterable = ((h, False) for h in hex_hashes)
+        blocks = await self._send_vector('getblock', params_iterable)
+        # print('hex_hashes = ', hex_hashes)
+        # print('blocks = ', blocks)
+        # Convert hex string to bytes
+        return [hex_to_bytes(block) for block in blocks]

@@ -1574,3 +1574,100 @@ class Axe(Dash):
         '''
         import x11_hash
         return x11_hash.getPoWHash(header)
+
+class MFCoin(NameMixin, Coin):
+    NAME = "MFCoin"
+    SHORTNAME = "MFC"
+    NET = "mainnet"
+    XPUB_VERBYTES = bytes.fromhex("0476b21e")
+    XPRV_VERBYTES = bytes.fromhex("0476ade4")
+    P2PKH_VERBYTE = bytes.fromhex("33")
+    P2SH_VERBYTES = [bytes.fromhex("05")]
+    WIF_BYTE = bytes.fromhex("b3")
+    GENESIS_HASH = ('e237705166fe5c4da57e166b22e4ddb3'
+                    '7793d9bd416481dba0febae743f30706')
+    TX_COUNT = 749889
+    TX_COUNT_HEIGHT = 10896
+    TX_PER_BLOCK = 69
+    VALUE_PER_COIN = 100000000
+    RPC_PORT = 22825
+
+    PEER_DEFAULT_PORTS = {'t': '50001', 's': '50002'}
+
+    MFC_HEADER_SIZE = 116
+    MFC_HEADER_EXTRA_SIZE = 198864
+    STATIC_BLOCK_HEADERS = True
+
+    DAEMON = daemon.MFCoinDaemon
+    DESERIALIZER = lib_tx.DeserializerMFCoin
+
+    @classmethod
+    def block(cls, raw_block, height):
+        '''Return a Block namedtuple given a raw block and its height.'''
+        header = cls.block_header(raw_block, height)
+        if height == 0 or len(raw_block) < cls.MFC_HEADER_EXTRA_SIZE:
+            offset = 0
+        else:
+            offset = cls.MFC_HEADER_EXTRA_SIZE
+        txs = cls.DESERIALIZER(raw_block, start=len(header)+offset).read_tx_block()
+        return Block(raw_block, header, txs)
+
+    @classmethod
+    def block_header(cls, block, height):
+        header = block[:cls.MFC_HEADER_SIZE]
+        return header
+
+    @classmethod
+    def header_hash(cls, header):
+        hash = double_sha256(header[:cls.MFC_HEADER_SIZE])
+        return hash
+
+    @classmethod
+    def hashX_from_script(cls, script):
+        address_script = cls.address_script_from_script(script)
+
+        return super().hashX_from_script(address_script)
+
+    @classmethod
+    def address_script_from_script(cls, script):
+        from electrumx.lib.script import _match_ops, Script, ScriptError
+
+        try:
+            ops = Script.get_ops(script)
+        except ScriptError:
+            return script
+
+        match = _match_ops
+
+        # Name opcodes
+        OP_NAME_NEW = OpCodes.OP_1
+        OP_NAME_UPDATE = OpCodes.OP_2
+        OP_NAME_DELETE = OpCodes.OP_3
+
+        # Opcode sequences for name operations
+        # Script structure: https://git.io/fjuRu
+        NAME_NEW_OPS = [OP_NAME_NEW, OpCodes.OP_DROP, -1, -1,
+                        OpCodes.OP_2DROP, -1, OpCodes.OP_DROP]
+        NAME_UPDATE_OPS = [OP_NAME_UPDATE, OpCodes.OP_DROP, -1, -1,
+                           OpCodes.OP_2DROP, -1, OpCodes.OP_DROP]
+        NAME_DELETE_OPS = [OP_NAME_DELETE, OpCodes.OP_DROP, -1,
+                           OpCodes.OP_DROP]
+
+        name_script_op_count = None
+
+        # Detect name operations; determine count of opcodes.
+        for name_ops in [NAME_NEW_OPS, NAME_UPDATE_OPS, NAME_DELETE_OPS]:
+            if match(ops[:len(name_ops)], name_ops):
+                name_script_op_count = len(name_ops)
+                break
+
+        if name_script_op_count is None:
+            return script
+
+        name_end_pos = cls.find_end_position_of_name(
+            script, name_script_op_count)
+
+        # Strip the name data to yield the address script
+        address_script = script[name_end_pos:]
+
+        return address_script
